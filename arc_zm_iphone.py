@@ -7,16 +7,16 @@ import time
 import os
 
 my_name="xxxxx@gmail.com" # icloud user name
-my_password="xxxx"	    # icloud main password. PyiCloud is webscraper - so app specific won't work
+my_password="xxxxx"	    # icloud main password. PyiCloud is webscraper - so app specific won't work
 
 
-home = (1111,-11111111) 	 # add your lat/long for your hose
+home = (11.111111,-11.111111)    # lat long for your home - put it in here
 mindist = 0.1			 # in miles. The distance between your home lat/long and where you are.
 				 # if the difference between your phone location and home location is more
 				 # than mindist, I will assume your phone is 'out of the house'
 
 				 # returns and then use an appropriate substring
-my_dev_name="xxxx"		 # your device name. Uncomment the print dev line below to see all the device names and
+my_dev_name="XXXXXX iPhone 5S"	 # your device name. Uncomment the print dev line below to see all the device names and
 				 # pick the one that corresponds to your iPhone
 
 # If you are home, this file will contain the word 'in', otherwise it will contain 'out'
@@ -36,11 +36,30 @@ for rdev in  api.devices:
 	if my_dev_name in dev:
 		flog.write("--- %s matches %s\n" % (dev,my_dev_name))
 		# wait for location till it is fresh
-		while rdev.location()['locationFinished'] !=True:
-			flog.write("Iterating location, as it is not fresh\n")
+
+		# for some odd ball reason, this locationFinished stuff does not work
+		# what I've found works well is seek location, snooze for a minute
+		# then seek again and then check for the finished flag
+		curr_loc = rdev.location()
+		curr_loc_set = (curr_loc['latitude'],curr_loc['longitude'])
+		dist = vincenty(home,curr_loc_set).miles
+		flog.write ("I got location as: (lat) %f, (long) %f, Finished:%d, Distance:%f miles\n" 
+		% (curr_loc['latitude'], curr_loc['longitude'],curr_loc['locationFinished'],dist))
+		flog.write ("Sleeping for 60 seconds to make sure its fresh...\n")
+		time.sleep(60)
+		curr_loc = rdev.location()
+		curr_loc_set = (curr_loc['latitude'],curr_loc['longitude'])
+		dist = vincenty(home,curr_loc_set).miles
+		flog.write ("AFTER SLEEP OF 60S: I got location as: (lat) %f, (long) %f, Finished:%d, Distance:%f miles\n" \
+		% (curr_loc['latitude'], curr_loc['longitude'],curr_loc['locationFinished'],dist))
+
+		while curr_loc['locationFinished'] !=True:
+			flog.write("Iterating location, as it is not fresh.Sleeping for additional 5 secs\n")
+			time.sleep(5)
+			curr_loc = rdev.location()
 			pass
-		latitude = float(rdev.location()['latitude'])
-		longitude = float(rdev.location()['longitude'])
+		latitude = float(curr_loc['latitude'])
+		longitude = float(curr_loc['longitude'])
 		current = (latitude,longitude)
 		dist = vincenty(home,current).miles
 
@@ -56,7 +75,7 @@ for rdev in  api.devices:
 		flog.write ("Writing phone state as %s\n" % phone_state)
 		f.close()
 		flog.close()
-		os.system('/bin/cat /usr/share/zoneminder/zm_phone_state_log.txt | /usr/bin/mail -s "ZoneMinder: Phone check status" user@gmail.com');
+		os.system('/bin/cat /usr/share/zoneminder/zm_phone_state_log.txt | /usr/bin/mail -s "ZoneMinder: Phone check status" arjunrc@gmail.com');
 		sys.exit()
 # if we come here, dev was not found, that's odd
 flog.write("Hmm, looks like I did not find your device?\n");
