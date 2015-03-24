@@ -75,7 +75,6 @@ for rdev in  api.devices:
 		flog.write ("Writing phone state as %s\n" % phone_state)
 		f.close()
 		flog.close()
-		os.system('/bin/cat /usr/share/zoneminder/zm_phone_state_log.txt | /usr/bin/mail -s "ZoneMinder: Phone check status" arjunrc@gmail.com');
 		sys.exit()
 # if we come here, dev was not found, that's odd
 flog.write("Hmm, looks like I did not find your device?\n");
