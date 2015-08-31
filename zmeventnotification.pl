@@ -34,8 +34,9 @@ use bytes;
 #
 # ==========================================================================
 
-use constant SLEEP_DELAY=>10; # duration in seconds after which this script will check for new events
+use constant SLEEP_DELAY=>5; # duration in seconds after which this script will check for new events
 use constant EVENT_COUNT=>10; # number of latest events to reurn
+use constant MONITOR_RELOAD_INTERVAL => 300;
 
 # Modify this subroutine to process the new events
 sub ProcessNewEvents
@@ -83,30 +84,87 @@ logSetSignal();
 Info( "Event Notification daemon  starting\n" );
 
 my $dbh = zmDbConnect();
+my %monitors;
+my $monitor_reload_time = 0;
 
-# when the script first starts, the last eventcount is 1, which basically means
-# return the latest EVENT_COUNT  events recorded. But after that, it will remember the latest event Id
-# and only return events greater than this value
 
-my $curId=1;
-
-while( 1 )
+while (1)
 {
-	my $sql = "(select Id,Name from Events where Id>$curId ORDER BY Id DESC LIMIT ".EVENT_COUNT.") order by Id ASC;";
-	my $sth = $dbh->prepare_cached( $sql ) or Fatal( "Can't prepare '$sql': ".$dbh->errstr() );
-	Info("Checking for events since last recorded event Id of $curId");
-	my $now = time();
-	my $res = $sth->execute() or Fatal( "Can't execute: ".$sth->errstr() );
-	my @arr=();
-	while( my $data = $sth->fetchrow_hashref() )
-	{
-		Info ("New Event received: ", $data->{Id}," ", $data->{Name});
-		$curId=$data->{Id};
-		push @arr, $data;
-		
-        }
-	ProcessNewEvents(@arr) if ($#arr>0);
-	sleep( SLEEP_DELAY);
+
+	if ( (time() - $monitor_reload_time) > MONITOR_RELOAD_INTERVAL )
+    	{
+		print ("Reloading Monitors...\n");
+		foreach my $monitor (values(%monitors))
+		{
+			zmMemInvalidate( $monitor );
+		}
+		loadMonitors();
+	}
+
+	foreach my $monitor ( values(%monitors) )
+	{ 
+		my ( $state, $last_event )
+		    = zmMemRead( $monitor,
+				 [ "shared_data:state",
+				   "shared_data:last_event"
+				 ]
+		);
+		if ($state == STATE_ALARM || $state == STATE_ALERT)
+		{
+			if ( !defined($monitor->{LastEvent})
+                 	     || ($last_event != $monitor->{LastEvent}))
+			{
+				print "\nNew Event $last_event FOR MONITOR ".$monitor->{Name};
+				$monitor->{LastState} = $state;
+				$monitor->{LastEvent} = $last_event;
+			}
+			else
+			{
+					}
+		}
+	}
+	sleep (SLEEP_DELAY);
 }
 Info( "Event Notification daemon exiting\n" );
 exit();
+
+sub loadMonitors
+{
+    Debug( "Loading monitors\n" );
+    $monitor_reload_time = time();
+
+    my %new_monitors = ();
+
+    my $sql = "SELECT * FROM Monitors
+               WHERE find_in_set( Function, 'Modect,Mocord,Nodect' )"
+    ;
+    my $sth = $dbh->prepare_cached( $sql )
+        or Fatal( "Can't prepare '$sql': ".$dbh->errstr() );
+    my $res = $sth->execute()
+        or Fatal( "Can't execute: ".$sth->errstr() );
+    while( my $monitor = $sth->fetchrow_hashref() )
+    {
+	print ("Found one \n");
+        next if ( !zmMemVerify( $monitor ) ); # Check shared memory ok
+	print ("Good one \n");
+
+        if ( defined($monitors{$monitor->{Id}}->{LastState}) )
+        {
+            $monitor->{LastState} = $monitors{$monitor->{Id}}->{LastState};
+        }
+        else
+        {
+            $monitor->{LastState} = zmGetMonitorState( $monitor );
+        }
+        if ( defined($monitors{$monitor->{Id}}->{LastEvent}) )
+        {
+            $monitor->{LastEvent} = $monitors{$monitor->{Id}}->{LastEvent};
+        }
+        else
+        {
+            $monitor->{LastEvent} = zmGetLastEvent( $monitor );
+        }
+        $new_monitors{$monitor->{Id}} = $monitor;
+    }
+    %monitors = %new_monitors;
+}

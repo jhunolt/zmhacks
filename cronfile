@@ -23,25 +23,28 @@
 MAILTO=""
 
 # m h  dom mon dow   command
-# Updates location of iPhone every hour 
-10 */1 * * * /usr/bin/arc_zm_iphone.py
+# Updates location of iPhone every hour:00
+0 */1 * * * /usr/local/bin/arc_zm_iphone.py
 
 # Check for iPhone status every 5 minutes
-*/5 * * * * /usr/bin/arc_zm_checkiPhone.sh
+*/5 * * * * /usr/local/bin/arc_zm_checkiPhone.sh
 
 ## MON-FRI RULES
 # switch to motion recording at 8:45 am M-F
-45 10 * * 1-5 /usr/bin/arc_zm_change_state.sh out-modect
+45 8  * * 1-5 /usr/local/bin/arc_zm_change_state.sh out-modect
+45 8  * * 1-5 /usr/local/bin/arc_zm_change_state.sh in-modect
 
 # switch to motion monitor at 6:30pm M-F
-30 18 * * 1-5 /usr/bin/arc_zm_change_state.sh in-modect
+30 18 * * 1-5 /usr/local/bin/arc_zm_change_state.sh in-modect
 
 # switch to motion recording 8:45PM M-F
-45 20 * * 1-5 /usr/bin/arc_zm_change_state.sh out-modect
+45 20 * * 1-5 /usr/local/bin/arc_zm_change_state.sh night-modect
 
 # switch to motion monitor 7AM M-F
-0 7 * *  1-5 /usr/bin/arc_zm_change_state.sh in-modect
+0 7 * *  1-5 /usr/local/bin/arc_zm_change_state.sh in-modect
 
 ## SAT-SUN RULES
-#switch to motion recording 
-0 0 * *  6-7 /usr/bin/arc_zm_change_state.sh out-modect
+# switch to in at 8am
+00 08 * * 6-7 /usr/local/bin/arc_zm_change_state.sh in-modect
+#switch to night at 8:45pm
+45 20 * * 6-7 /usr/local/bin/arc_zm_change_state.sh night-modect

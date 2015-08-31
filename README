@@ -1,3 +1,6 @@
+Note: These files were modified on Aug 31
+ZoneMinder 1.28.104+ now has isActive built in, so tracking runstates separately is not needed
+
 These changes to ZoneMinder relate to various hacks that are maintained here:
 http://www.zoneminder.com/wiki/index.php/Various_Learnings_from_getting_Zomeminder_1.28.1_working_well_on_Ubuntu_Server_14.04
 
