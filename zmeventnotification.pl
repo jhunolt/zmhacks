@@ -177,9 +177,9 @@ sub initSocketServer
 		on_tick => sub {
 			if (checkEvents())
 			{
-				print ("EVENT: $evt_str\n");
-				#	my ($serv) = @_;
-				#	$_->send_utf8(time) for $serv->connections;
+				Info ("Sending $evt_str to all clients\n");
+					my ($serv) = @_;
+					$_->send_utf8($evt_str) for $serv->connections;
 			}
 		},
 	)->start;
