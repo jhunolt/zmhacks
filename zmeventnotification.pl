@@ -47,19 +47,6 @@ use constant EVENT_NOTIFICATION_PORT=>9000; # port for Websockets connection
 
 
 
-# Modify this subroutine to process the new events
-sub ProcessNewEvents
-{
-# You will receive a list of new event Id and Name in this subroutine
-# since last check. You should process them as fit 
-
-#	my @aref = @_;
-#	foreach  (@aref)
-#	{
-#		my $elem=$_;
-#		print ($elem->{Id},":",$elem->{Name},"\n");
-#	}
-}
 
 # ==========================================================================
 #
