@@ -3,7 +3,18 @@
 # ==========================================================================
 #
 # ZoneMinder Event Watch Script, $Date$, $Revision$
-# ~ asker
+#
+# A very light weight event notification daemon
+# Uses shared memory to detect new events (polls SHM)
+# Also opens a websocket connection at a configurable port
+# so events can be reported
+# Any client can connect to this web socket and handle it further
+# for example, send it out via APNS/GCM or any other mechanism
+#
+# This is a much  faster and low overhead method compared to zmfilter
+# as there is no DB overhead nor SQL searches for event matches
+
+# ~ PP
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -20,13 +31,9 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #
 # ==========================================================================
-#
-# This script checks for the last LAST_COUNT events that were created since
-# last check time and returns the Id and Name. This puts in a framework for 
-# doing push notifications or any other action if a new event is detected
-#
 use strict;
 use bytes;
+use Net::WebSocket::Server;
 
 # ==========================================================================
 #
@@ -34,9 +41,11 @@ use bytes;
 #
 # ==========================================================================
 
-use constant SLEEP_DELAY=>5; # duration in seconds after which this script will check for new events
-use constant EVENT_COUNT=>10; # number of latest events to reurn
+use constant SLEEP_DELAY=>5; # duration in seconds after which we will check for new events
 use constant MONITOR_RELOAD_INTERVAL => 300;
+use constant EVENT_NOTIFICATION_PORT=>9000; # port for Websockets connection
+
+
 
 # Modify this subroutine to process the new events
 sub ProcessNewEvents
@@ -72,9 +81,7 @@ delete @ENV{qw(IFS CDPATH ENV BASH_ENV)};
 
 sub Usage
 {
-    print( "
-Usage: zmeventnotification.pl
-");
+    	print( "This daemon is not meant to be invoked from command line\n");
 	exit( -1 );
 }
 
@@ -86,14 +93,19 @@ Info( "Event Notification daemon  starting\n" );
 my $dbh = zmDbConnect();
 my %monitors;
 my $monitor_reload_time = 0;
+my $wss;
+
+initSocketServer();
+Info( "Event Notification daemon exiting\n" );
+exit();
 
 
-while (1)
+sub checkEvents()
 {
 
 	if ( (time() - $monitor_reload_time) > MONITOR_RELOAD_INTERVAL )
     	{
-		print ("Reloading Monitors...\n");
+		Debug ("Reloading Monitors...\n");
 		foreach my $monitor (values(%monitors))
 		{
 			zmMemInvalidate( $monitor );
@@ -114,7 +126,7 @@ while (1)
 			if ( !defined($monitor->{LastEvent})
                  	     || ($last_event != $monitor->{LastEvent}))
 			{
-				print "\nNew Event $last_event FOR MONITOR ".$monitor->{Name};
+				Info( "New event $last_event reported for ".$monitor->{Name}."\n");
 				$monitor->{LastState} = $state;
 				$monitor->{LastEvent} = $last_event;
 			}
@@ -123,10 +135,7 @@ while (1)
 					}
 		}
 	}
-	sleep (SLEEP_DELAY);
 }
-Info( "Event Notification daemon exiting\n" );
-exit();
 
 sub loadMonitors
 {
@@ -144,9 +153,7 @@ sub loadMonitors
         or Fatal( "Can't execute: ".$sth->errstr() );
     while( my $monitor = $sth->fetchrow_hashref() )
     {
-	print ("Found one \n");
         next if ( !zmMemVerify( $monitor ) ); # Check shared memory ok
-	print ("Good one \n");
 
         if ( defined($monitors{$monitor->{Id}}->{LastState}) )
         {
@@ -167,4 +174,19 @@ sub loadMonitors
         $new_monitors{$monitor->{Id}} = $monitor;
     }
     %monitors = %new_monitors;
+}
+
+sub initSocketServer
+{
+	checkEvents();
+	Info ("Web Socket Event Server listening on port ".EVENT_NOTIFICATION_PORT."\n");
+	$wss = Net::WebSocket::Server->new(
+		listen => EVENT_NOTIFICATION_PORT,
+		tick_period => SLEEP_DELAY,
+		on_tick => sub {
+			checkEvents();
+			my ($serv) = @_;
+			$_->send_utf8(time) for $serv->connections;
+		},
+	)->start;
 }
