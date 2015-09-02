@@ -94,6 +94,7 @@ my $dbh = zmDbConnect();
 my %monitors;
 my $monitor_reload_time = 0;
 my $wss;
+my $evt_str="";
 
 initSocketServer();
 Info( "Event Notification daemon exiting\n" );
@@ -103,6 +104,8 @@ exit();
 sub checkEvents()
 {
 
+	my $eventFound = 0;
+	$evt_str="";
 	if ( (time() - $monitor_reload_time) > MONITOR_RELOAD_INTERVAL )
     	{
 		Debug ("Reloading Monitors...\n");
@@ -129,12 +132,13 @@ sub checkEvents()
 				Info( "New event $last_event reported for ".$monitor->{Name}."\n");
 				$monitor->{LastState} = $state;
 				$monitor->{LastEvent} = $last_event;
+				$evt_str = $evt_str.$monitor->{Name}.":".$monitor->{Id}.":".$last_event.",";
+				$eventFound = 1;
 			}
-			else
-			{
-					}
+			
 		}
 	}
+	return ($eventFound);
 }
 
 sub loadMonitors
@@ -184,9 +188,12 @@ sub initSocketServer
 		listen => EVENT_NOTIFICATION_PORT,
 		tick_period => SLEEP_DELAY,
 		on_tick => sub {
-			checkEvents();
-			my ($serv) = @_;
-			$_->send_utf8(time) for $serv->connections;
+			if (checkEvents())
+			{
+				print ("EVENT: $evt_str\n");
+				#	my ($serv) = @_;
+				#	$_->send_utf8(time) for $serv->connections;
+			}
 		},
 	)->start;
 }
