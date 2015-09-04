@@ -60,14 +60,14 @@ use POSIX;
 use DBI;
 use Data::Dumper;
 
-use CGI::Cookie;
-use PHP::Session;
+#use CGI::Cookie;
+#use PHP::Session;
 
 
-my %cookies = fetch CGI::Cookie;
-my $session = PHP::Session->new("PHPSESSID");
-print Dumper($session);
-exit;
+#my %cookies = fetch CGI::Cookie;
+#my $session = PHP::Session->new("PHPSESSID");
+#print Dumper($session);
+#exit;
 
 
 
@@ -87,7 +87,6 @@ sub Usage
 logInit();
 logSetSignal();
 
-exit;
 
 
 Info( "Event Notification daemon  starting\n" );
