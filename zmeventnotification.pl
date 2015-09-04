@@ -60,6 +60,18 @@ use POSIX;
 use DBI;
 use Data::Dumper;
 
+use CGI::Cookie;
+use PHP::Session;
+
+
+my %cookies = fetch CGI::Cookie;
+my $session = PHP::Session->new("PHPSESSID");
+print Dumper($session);
+exit;
+
+
+
+
 $| = 1;
 
 $ENV{PATH}  = '/bin:/usr/bin';
@@ -74,6 +86,9 @@ sub Usage
 
 logInit();
 logSetSignal();
+
+exit;
+
 
 Info( "Event Notification daemon  starting\n" );
 
@@ -177,10 +192,23 @@ sub initSocketServer
 		on_tick => sub {
 			if (checkEvents())
 			{
-				Info ("Sending $evt_str to all clients\n");
+				Info ("Sending $evt_str to all websocket clients\n");
 					my ($serv) = @_;
 					$_->send_utf8($evt_str) for $serv->connections;
 			}
 		},
+		on_connect => sub {
+			my ($serv, $conn) = @_;
+			Info ("got a websocket connection from ".$conn->ip()."\n");
+			$conn->on(
+				utf8 => sub {
+					Debug ("got a message\n");
+					my ($conn, $msg) = @_;
+					$conn->send_utf8("FFS"); # In future we can support special requests from clients
+				},
+			);
+
+			
+		}
 	)->start;
 }
