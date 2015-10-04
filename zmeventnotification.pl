@@ -206,7 +206,7 @@ sub initSocketServer
 				handshake => sub {
 					Info ("Websockets: New Connection Handshake");
 					my ($conn, $handshake) = @_;
-					print Dumper($handshake->req);
+					#print Dumper($handshake->req);
 					my $cookieFound=0;
 					if (UNIVERSAL::isa( $handshake->req->cookies, "HASH" ))
 					{
