@@ -1,4 +1,4 @@
-#!/usr/bin/perl -wT
+#!/usr/bin/perl -T
 #
 # ==========================================================================
 #
@@ -35,6 +35,7 @@ use strict;
 use bytes;
 use Net::WebSocket::Server;
 use IO::Socket::SSL;
+use Data::Dumper;
 
 # ==========================================================================
 #
@@ -201,6 +202,35 @@ sub initSocketServer
 					Debug ("got a message\n");
 					my ($conn, $msg) = @_;
 					$conn->send_utf8("FFS"); # In future we can support special requests from clients
+				},
+				handshake => sub {
+					Info ("Websockets: New Connection Handshake");
+					my ($conn, $handshake) = @_;
+					print Dumper($handshake->req);
+					my $cookieFound=0;
+					if (UNIVERSAL::isa( $handshake->req->cookies, "HASH" ))
+					{
+						foreach my $c (@{$handshake->req->cookies->{pairs}[0]})
+						{
+							if ($c eq 'ZMSESSID')
+							{
+								$cookieFound=1;
+								last;
+							}
+						}
+					}
+					if ($cookieFound)
+					{
+						Debug ("ZMSESSID cookie found, allowing this connection");
+											
+					}
+					else # no cookie
+					{
+							Debug ("ZMSESSID cookie NOT found, disconnecting this connection");
+							$conn->disconnect();
+							return;
+							
+					}
 				},
 			);
 
