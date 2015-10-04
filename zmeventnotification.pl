@@ -34,6 +34,7 @@
 use strict;
 use bytes;
 use Net::WebSocket::Server;
+use IO::Socket::SSL;
 
 # ==========================================================================
 #
@@ -44,6 +45,7 @@ use Net::WebSocket::Server;
 use constant SLEEP_DELAY=>5; # duration in seconds after which we will check for new events
 use constant MONITOR_RELOAD_INTERVAL => 300;
 use constant EVENT_NOTIFICATION_PORT=>9000; # port for Websockets connection
+
 
 
 
@@ -60,18 +62,6 @@ use POSIX;
 use DBI;
 use Data::Dumper;
 
-#use CGI::Cookie;
-#use PHP::Session;
-
-
-#my %cookies = fetch CGI::Cookie;
-#my $session = PHP::Session->new("PHPSESSID");
-#print Dumper($session);
-#exit;
-
-
-
-
 $| = 1;
 
 $ENV{PATH}  = '/bin:/usr/bin';
@@ -87,8 +77,6 @@ sub Usage
 logInit();
 logSetSignal();
 
-
-
 Info( "Event Notification daemon  starting\n" );
 
 my $dbh = zmDbConnect();
@@ -100,7 +88,6 @@ my $evt_str="";
 initSocketServer();
 Info( "Event Notification daemon exiting\n" );
 exit();
-
 
 sub checkEvents()
 {
@@ -184,9 +171,19 @@ sub loadMonitors
 sub initSocketServer
 {
 	checkEvents();
+
+	my $ssl_server = IO::Socket::SSL->new(
+      	      Listen        => 10,
+	      LocalPort     => EVENT_NOTIFICATION_PORT,
+	      Proto         => 'tcp',
+	      SSL_cert_file => '/etc/apache2/ssl/zoneminder.crt',
+	      SSL_key_file  => '/etc/apache2/ssl/zoneminder.key'
+	    ) or die "failed to listen: $!";
+
 	Info ("Web Socket Event Server listening on port ".EVENT_NOTIFICATION_PORT."\n");
+
 	$wss = Net::WebSocket::Server->new(
-		listen => EVENT_NOTIFICATION_PORT,
+		listen => $ssl_server,
 		tick_period => SLEEP_DELAY,
 		on_tick => sub {
 			if (checkEvents())
