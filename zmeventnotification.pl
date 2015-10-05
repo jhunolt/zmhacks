@@ -177,6 +177,7 @@ sub initSocketServer
       	      Listen        => 10,
 	      LocalPort     => EVENT_NOTIFICATION_PORT,
 	      Proto         => 'tcp',
+	      Reuse	    => 1,
 	      SSL_cert_file => '/etc/apache2/ssl/zoneminder.crt',
 	      SSL_key_file  => '/etc/apache2/ssl/zoneminder.key'
 	    ) or die "failed to listen: $!";
@@ -204,7 +205,7 @@ sub initSocketServer
 					$conn->send_utf8("FFS"); # In future we can support special requests from clients
 				},
 				handshake => sub {
-					Info ("Websockets: New Connection Handshake");
+					Info ("Websockets: New Connection Handshake requested");
 					my ($conn, $handshake) = @_;
 					#print Dumper($handshake->req);
 					my $cookieFound=0;
@@ -221,12 +222,12 @@ sub initSocketServer
 					}
 					if ($cookieFound)
 					{
-						Debug ("ZMSESSID cookie found, allowing this connection");
+						Info ("ZMSESSID cookie found, allowing this connection");
 											
 					}
 					else # no cookie
 					{
-							Debug ("ZMSESSID cookie NOT found, disconnecting this connection");
+							Info ("ZMSESSID cookie NOT found, disconnecting this connection");
 							$conn->disconnect();
 							return;
 							
