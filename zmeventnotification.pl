@@ -31,11 +31,18 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #
 # ==========================================================================
+
+
+#perl -MCPAN -e "install Crypt::MySQL"
+#perl -MCPAN -e "install Net::WebSocket::Server"
+
+
 use strict;
 use bytes;
 use Net::WebSocket::Server;
 use IO::Socket::SSL;
 use Data::Dumper;
+use Crypt::MySQL qw(password password41);
 
 # ==========================================================================
 #
@@ -46,10 +53,6 @@ use Data::Dumper;
 use constant SLEEP_DELAY=>5; # duration in seconds after which we will check for new events
 use constant MONITOR_RELOAD_INTERVAL => 300;
 use constant EVENT_NOTIFICATION_PORT=>9000; # port for Websockets connection
-
-
-
-
 
 # ==========================================================================
 #
@@ -169,6 +172,31 @@ sub loadMonitors
     %monitors = %new_monitors;
 }
 
+sub validateZM
+{
+	my ($u,$p) = @_;
+	return 0 if ( $u eq "" || $p eq "");
+	my $sql = 'select Password from Users where Username=?';
+	my $sth = $dbh->prepare_cached($sql)
+	 or Fatal( "Can't prepare '$sql': ".$dbh->errstr() );
+        my $res = $sth->execute( $u )
+	or Fatal( "Can't execute: ".$sth->errstr() );
+	if (my ($state) = $sth->fetchrow_hashref())
+	{
+		my $encryptedPassword = password41($p);
+		#print "Retrieved Password:",$state->{Password},"\n";
+		#print "Provided Password:",$encryptedPassword,"\n";
+		$sth->finish();
+		return $state->{Password} eq $encryptedPassword ? 1:0; 
+	}
+	else
+	{
+		$sth->finish();
+		return 0;
+	}
+
+}
+
 sub initSocketServer
 {
 	checkEvents();
@@ -200,37 +228,34 @@ sub initSocketServer
 			Info ("got a websocket connection from ".$conn->ip()."\n");
 			$conn->on(
 				utf8 => sub {
-					Debug ("got a message\n");
 					my ($conn, $msg) = @_;
+					Debug ("got a message from ".$conn->ip()." saying: ".$msg);
 					$conn->send_utf8("FFS"); # In future we can support special requests from clients
 				},
 				handshake => sub {
-					Info ("Websockets: New Connection Handshake requested");
 					my ($conn, $handshake) = @_;
-					#print Dumper($handshake->req);
-					my $cookieFound=0;
-					if (UNIVERSAL::isa( $handshake->req->cookies, "HASH" ))
+					Info ("Websockets: New Connection Handshake requested from ".$conn->ip());
+					if ($handshake->res->resource_name)
 					{
-						foreach my $c (@{$handshake->req->cookies->{pairs}[0]})
+						my $resourceName = $handshake->res->resource_name;
+						my ($uname, $pwd) = $resourceName =~ /user=(.*)&passwd=(.*)/i;
+						if (!validateZM($uname,$pwd))
 						{
-							if ($c eq 'ZMSESSID')
-							{
-								$cookieFound=1;
-								last;
-							}
-						}
-					}
-					if ($cookieFound)
-					{
-						Info ("ZMSESSID cookie found, allowing this connection");
-											
-					}
-					else # no cookie
-					{
-							Info ("ZMSESSID cookie NOT found, disconnecting this connection");
-							$conn->disconnect();
-							return;
 							
+							Info ("Rejecting connection from ".$conn->ip()."- invalid credentials");
+							$conn->disconnect();
+			
+						}
+						else
+						{
+							Info ("Accepted connection from ". $conn->ip()."-valid credentails for $uname");
+						}
+					
+					}
+					else
+					{
+						Info ("Rejecting connection from ".$conn->ip()."- no credentials");
+						$conn->disconnect();
 					}
 				},
 			);
