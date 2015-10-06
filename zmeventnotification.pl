@@ -216,11 +216,15 @@ sub initSocketServer
 		listen => $ssl_server,
 		tick_period => SLEEP_DELAY,
 		on_tick => sub {
+			$evt_str="Hello";
 			if (checkEvents())
+			#if (1)
 			{
 				Info ("Sending $evt_str to all websocket clients\n");
 					my ($serv) = @_;
 					$_->send_utf8($evt_str) for $serv->connections;
+				Info ("Sending Complete\n");
+
 			}
 		},
 		on_connect => sub {
