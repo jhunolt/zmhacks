@@ -2,7 +2,9 @@
 #
 # ==========================================================================
 #
-# ZoneMinder Event Watch Script, $Date$, $Revision$
+# THIS SCRIPT MUST BE RUN WITH SUDO OR STARTED VIA ZMDC.PL
+#
+# ZoneMinder Realtime Notification System
 #
 # A very light weight event notification daemon
 # Uses shared memory to detect new events (polls SHM)
@@ -41,7 +43,6 @@ use strict;
 use bytes;
 use Net::WebSocket::Server;
 use IO::Socket::SSL;
-use Data::Dumper;
 use Crypt::MySQL qw(password password41);
 use JSON;
 
@@ -51,10 +52,12 @@ use JSON;
 #
 # ==========================================================================
 
-use constant SLEEP_DELAY=>5; # duration in seconds after which we will check for new events
+use constant SLEEP_DELAY=>5; 			# duration in seconds after which we will check for new events
 use constant MONITOR_RELOAD_INTERVAL => 300;
-use constant EVENT_NOTIFICATION_PORT=>9000; # port for Websockets connection
-use constant WEBSOCKET_AUTH_DELAY=>10; # max seconds by which authentication must be done
+use constant EVENT_NOTIFICATION_PORT=>9000; 	# port for Websockets connection
+use constant WEBSOCKET_AUTH_DELAY=>20; 		# max seconds by which authentication must be done
+use constant SSL_CERT_FILE=>'/etc/apache2/ssl/zoneminder.crt';	 #needed for WSS to work
+use constant SSL_KEY_FILE=>'/etc/apache2/ssl/zoneminder.key';
 
 # ==========================================================================
 #
@@ -66,7 +69,6 @@ use lib '/usr/local/lib/x86_64-linux-gnu/perl5';
 use ZoneMinder;
 use POSIX;
 use DBI;
-use Data::Dumper;
 
 $| = 1;
 
@@ -217,7 +219,8 @@ sub checkConnection
 				my $conn = $_->{conn};
 				Info ("Rejecting ".$conn->ip()." - authentication timeout");
 				$_->{pending} = '-1';
-				$_->{conn}->send_utf8("NOAUTH");
+				my $str = encode_json({status=>'Fail', reason => 'NOAUTH'});
+				eval {$_->{conn}->send_utf8($str);};
 				$_->{conn}->disconnect();
 			}
 		}
@@ -229,7 +232,9 @@ sub checkConnection
 sub checkMessage
 {
 	my ($conn, $msg) = @_;	
-	my ($uname, $pwd) = $msg =~ /user=(.*)&passwd=(.*)/i;
+	my $json_string = decode_json($msg);
+	my $uname = $json_string->{'data'}->{'user'};
+	my $pwd = $json_string->{'data'}->{'password'};
 	return if ($uname eq "" || $pwd eq "");
 	foreach (@active_connections)
 	{
@@ -239,15 +244,17 @@ sub checkMessage
 		{
 			if (!validateZM($uname,$pwd))
 			{
-			 	$_->{pending}='-1';
-				$_->{conn}->send_utf8('BADAUTH');
+				my $str = encode_json({status=>'Fail', reason => 'BADAUTH'});
+				eval {$_->{conn}->send_utf8($str);};
 				Info("Bad authentication provided by ".$_->{conn}->ip());
+			 	$_->{pending}='-1';
 			}
 			else
 			{
 
 			 	$_->{pending}='0';
-				$_->{conn}->send_utf8('OK');
+				my $str = encode_json({status=>'Success', reason => ''});
+				eval {$_->{conn}->send_utf8($str);};
 				Info("Correct authentication provided by ".$_->{conn}->ip());
 				
 			}
@@ -263,8 +270,8 @@ sub initSocketServer
 	      LocalPort     => EVENT_NOTIFICATION_PORT,
 	      Proto         => 'tcp',
 	      Reuse	    => 1,
-	      SSL_cert_file => '/etc/apache2/ssl/zoneminder.crt',
-	      SSL_key_file  => '/etc/apache2/ssl/zoneminder.key'
+	      SSL_cert_file => SSL_CERT_FILE,
+	      SSL_key_file  => SSL_KEY_FILE
 	    ) or die "failed to listen: $!";
 
 	Info ("Web Socket Event Server listening on port ".EVENT_NOTIFICATION_PORT."\n");
@@ -274,21 +281,18 @@ sub initSocketServer
 		tick_period => SLEEP_DELAY,
 		on_tick => sub {
 			checkConnection();
-			#if (checkEvents())
-			if (1)
+			if (checkEvents())
 			{
 				Info ("Sending $evt_str to all websocket clients\n");
 					my ($serv) = @_;
-					my $str = encode_json({events => \@events});
-					#print $str;
+					my $str = encode_json({status=>'Success', events => \@events});
 					foreach (@active_connections)
 					{
 						if ($_->{pending} == '0')
 						{
-							$_->{conn}->send_utf8($str);
+							eval {$_->{conn}->send_utf8($str);};
 						}
 						
-					#$_->send_utf8($str) for $serv->connections;
 					}
 
 
@@ -300,37 +304,15 @@ sub initSocketServer
 			$conn->on(
 				utf8 => sub {
 					my ($conn, $msg) = @_;
-					Debug ("got a message from ".$conn->ip()." saying: ".$msg);
+					Info ("got a message from ".$conn->ip()." saying: ".$msg);
 					checkMessage($conn, $msg);
-					#$conn->send_utf8("FFS"); # In future we can support special requests from clients
 				},
 				handshake => sub {
 					my ($conn, $handshake) = @_;
 					Info ("Websockets: New Connection Handshake requested from ".$conn->ip()." state=pending auth");
 					my $connect_time = time();
 					push @active_connections, {conn => $conn, pending => '1', time=>$connect_time};
-					#if ($handshake->res->resource_name)
-					#{
-					#	my $resourceName = $handshake->res->resource_name;
-					#	my ($uname, $pwd) = $resourceName =~ /user=(.*)&passwd=(.*)/i;
-					#	if (!validateZM($uname,$pwd))
-					#	{
-					#		
-					#		Info ("Rejecting connection from ".$conn->ip()."- invalid credentials");
-					#		#$conn->disconnect();
-		#	
-		#				}
-		#				else
-		#				{
-		#					Info ("Accepted connection from ". $conn->ip()."-valid credentails for $uname");
-		#				}
-		#			
-		#			}
-		#			else
-		#			{
-		#				Info ("Rejecting connection from ".$conn->ip()."- no credentials");
-		#				#$conn->disconnect();
-		#			}
+					
 				},
 			);
 
