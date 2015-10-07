@@ -43,6 +43,7 @@ use Net::WebSocket::Server;
 use IO::Socket::SSL;
 use Data::Dumper;
 use Crypt::MySQL qw(password password41);
+use JSON;
 
 # ==========================================================================
 #
@@ -88,6 +89,7 @@ my %monitors;
 my $monitor_reload_time = 0;
 my $wss;
 my $evt_str="";
+my @events;
 
 initSocketServer();
 Info( "Event Notification daemon exiting\n" );
@@ -108,6 +110,7 @@ sub checkEvents()
 		loadMonitors();
 	}
 
+	@events = ();
 	foreach my $monitor ( values(%monitors) )
 	{ 
 		my ( $state, $last_event )
@@ -125,6 +128,10 @@ sub checkEvents()
 				$monitor->{LastState} = $state;
 				$monitor->{LastEvent} = $last_event;
 				$evt_str = $evt_str.$monitor->{Name}.":".$monitor->{Id}.":".$last_event.",";
+				my $name = $monitor->{Name};
+				my $mid = $monitor->{Id};
+				my $eid = $last_event;
+				push @events, {Name => $name, MonitorId => $mid, EventId => $last_event};
 				$eventFound = 1;
 			}
 			
@@ -184,8 +191,6 @@ sub validateZM
 	if (my ($state) = $sth->fetchrow_hashref())
 	{
 		my $encryptedPassword = password41($p);
-		#print "Retrieved Password:",$state->{Password},"\n";
-		#print "Provided Password:",$encryptedPassword,"\n";
 		$sth->finish();
 		return $state->{Password} eq $encryptedPassword ? 1:0; 
 	}
@@ -222,7 +227,9 @@ sub initSocketServer
 			{
 				Info ("Sending $evt_str to all websocket clients\n");
 					my ($serv) = @_;
-					$_->send_utf8($evt_str) for $serv->connections;
+					my $str = encode_json({events => \@events});
+					print $str;
+					$_->send_utf8($str) for $serv->connections;
 				Info ("Sending Complete\n");
 
 			}
