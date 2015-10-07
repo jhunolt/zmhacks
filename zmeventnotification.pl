@@ -54,6 +54,7 @@ use JSON;
 use constant SLEEP_DELAY=>5; # duration in seconds after which we will check for new events
 use constant MONITOR_RELOAD_INTERVAL => 300;
 use constant EVENT_NOTIFICATION_PORT=>9000; # port for Websockets connection
+use constant WEBSOCKET_AUTH_DELAY=>10; # max seconds by which authentication must be done
 
 # ==========================================================================
 #
@@ -89,7 +90,9 @@ my %monitors;
 my $monitor_reload_time = 0;
 my $wss;
 my $evt_str="";
-my @events;
+my @events=();
+my @active_connections=();
+
 
 initSocketServer();
 Info( "Event Notification daemon exiting\n" );
@@ -202,6 +205,55 @@ sub validateZM
 
 }
 
+sub checkConnection
+{
+	foreach (@active_connections)
+	{
+		my $curtime = time();
+		if ($_->{pending} == '1')
+		{
+			if ($curtime - $_->{time} > WEBSOCKET_AUTH_DELAY)
+			{
+				my $conn = $_->{conn};
+				Info ("Rejecting ".$conn->ip()." - authentication timeout");
+				$_->{pending} = '-1';
+				$_->{conn}->send_utf8("NOAUTH");
+				$_->{conn}->disconnect();
+			}
+		}
+
+	}
+	@active_connections = grep { $_->{pending} != '-1' } @active_connections;
+}
+
+sub checkMessage
+{
+	my ($conn, $msg) = @_;	
+	my ($uname, $pwd) = $msg =~ /user=(.*)&passwd=(.*)/i;
+	return if ($uname eq "" || $pwd eq "");
+	foreach (@active_connections)
+	{
+		if (($_->{conn}->ip() eq $conn->ip())  &&
+	            ($_->{conn}->port() eq $conn->port())  &&
+		    ($_->{pending}='1'))
+		{
+			if (!validateZM($uname,$pwd))
+			{
+			 	$_->{pending}='-1';
+				$_->{conn}->send_utf8('BADAUTH');
+				Info("Bad authentication provided by ".$_->{conn}->ip());
+			}
+			else
+			{
+
+			 	$_->{pending}='0';
+				$_->{conn}->send_utf8('OK');
+				Info("Correct authentication provided by ".$_->{conn}->ip());
+				
+			}
+		}
+	}
+}
 sub initSocketServer
 {
 	checkEvents();
@@ -221,16 +273,24 @@ sub initSocketServer
 		listen => $ssl_server,
 		tick_period => SLEEP_DELAY,
 		on_tick => sub {
-			$evt_str="Hello";
-			if (checkEvents())
-			#if (1)
+			checkConnection();
+			#if (checkEvents())
+			if (1)
 			{
 				Info ("Sending $evt_str to all websocket clients\n");
 					my ($serv) = @_;
 					my $str = encode_json({events => \@events});
-					print $str;
-					$_->send_utf8($str) for $serv->connections;
-				Info ("Sending Complete\n");
+					#print $str;
+					foreach (@active_connections)
+					{
+						if ($_->{pending} == '0')
+						{
+							$_->{conn}->send_utf8($str);
+						}
+						
+					#$_->send_utf8($str) for $serv->connections;
+					}
+
 
 			}
 		},
@@ -241,33 +301,36 @@ sub initSocketServer
 				utf8 => sub {
 					my ($conn, $msg) = @_;
 					Debug ("got a message from ".$conn->ip()." saying: ".$msg);
-					$conn->send_utf8("FFS"); # In future we can support special requests from clients
+					checkMessage($conn, $msg);
+					#$conn->send_utf8("FFS"); # In future we can support special requests from clients
 				},
 				handshake => sub {
 					my ($conn, $handshake) = @_;
-					Info ("Websockets: New Connection Handshake requested from ".$conn->ip());
-					if ($handshake->res->resource_name)
-					{
-						my $resourceName = $handshake->res->resource_name;
-						my ($uname, $pwd) = $resourceName =~ /user=(.*)&passwd=(.*)/i;
-						if (!validateZM($uname,$pwd))
-						{
-							
-							Info ("Rejecting connection from ".$conn->ip()."- invalid credentials");
-							$conn->disconnect();
-			
-						}
-						else
-						{
-							Info ("Accepted connection from ". $conn->ip()."-valid credentails for $uname");
-						}
-					
-					}
-					else
-					{
-						Info ("Rejecting connection from ".$conn->ip()."- no credentials");
-						$conn->disconnect();
-					}
+					Info ("Websockets: New Connection Handshake requested from ".$conn->ip()." state=pending auth");
+					my $connect_time = time();
+					push @active_connections, {conn => $conn, pending => '1', time=>$connect_time};
+					#if ($handshake->res->resource_name)
+					#{
+					#	my $resourceName = $handshake->res->resource_name;
+					#	my ($uname, $pwd) = $resourceName =~ /user=(.*)&passwd=(.*)/i;
+					#	if (!validateZM($uname,$pwd))
+					#	{
+					#		
+					#		Info ("Rejecting connection from ".$conn->ip()."- invalid credentials");
+					#		#$conn->disconnect();
+		#	
+		#				}
+		#				else
+		#				{
+		#					Info ("Accepted connection from ". $conn->ip()."-valid credentails for $uname");
+		#				}
+		#			
+		#			}
+		#			else
+		#			{
+		#				Info ("Rejecting connection from ".$conn->ip()."- no credentials");
+		#				#$conn->disconnect();
+		#			}
 				},
 			);
 
