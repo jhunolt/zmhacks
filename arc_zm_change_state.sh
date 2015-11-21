@@ -6,7 +6,7 @@ runstate=`mysql -N -B -u$zmdbuser -p$zmdbpass zm -e "select Name  from States wh
 if [ "$runstate" != "vacation" ] 
 then
 	/usr/local/bin/arc_zm_log.pl "I've been requested to change to $1 - OK"
-	echo "Change State Notification:$1" | /usr/bin/mail -s "ZoneMinder:Change State $1 Notification " arjunrc@gmail.com
+	echo "Change State Notification:$1" | /usr/bin/mail -s "ZoneMinder:Change State $1 Notification " user@gmail.com
 	/usr/local/bin/zmpkg.pl $1;
 	
 else
