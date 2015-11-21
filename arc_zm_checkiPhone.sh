@@ -22,12 +22,12 @@ nowdate=`date`
 if [ "$runstate" = "in-modect" ] && [ "$iphonestate" = "out" ]; then
 	$zmlog "ARC:Oops looks like you stepped out and ZM is not aware!"
 	$control out-modect
-	echo "Changed to out-modect at $nowdate - your phone is out" | /usr/bin/mail -s "ZoneMinder:Changed state to out-modect" arjunrc@gmail.com	
+	echo "Changed to out-modect at $nowdate - your phone is out" | /usr/bin/mail -s "ZoneMinder:Changed state to out-modect" user@gmail.com	
 
 elif [ "$runstate" = "out-modect" ] && [ "$iphonestate" = "in" ]; then
 	$zmlog "Hey, ZM thinks you are out, but your phone says you are in"
 	$control in-modect
-	echo "Changed to in-modect at $nowdate - your phone is in" | /usr/bin/mail -s "ZoneMinder:Changed state to in-modect" arjunrc@gmail.com	
+	echo "Changed to in-modect at $nowdate - your phone is in" | /usr/bin/mail -s "ZoneMinder:Changed state to in-modect" user@gmail.com	
 
 #else
 	#echo "No need to change state: Your phone says $iphonestate and ZM is in $runstate" >> $filepath/$logfile
