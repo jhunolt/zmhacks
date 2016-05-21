@@ -5,23 +5,26 @@ import geopy.exc
 import sys
 import time
 import os
+import click
 
-my_name="YOUREMAIL" # icloud user name
-my_password="YOURPASSWORD"	    # icloud main password. PyiCloud is webscraper - so app specific won't work
+# CHANGE THESE 4 LINES BELOW
+my_name="xxxxxxxxxxxxxxx" # icloud user name
+my_password="xxxxxxxxxx"	    # icloud main password. PyiCloud is webscraper - so app specific won't work
+home = (0,0)			# change to lat long for your home
+my_dev_name="XXXX iPhone 5S"	 # your device name. Uncomment the print dev line below to see all the device names and
+# END OF CHANGES
 
 
-home = (19.345546,-33.343323)
 mindist = 0.1			 # in miles. The distance between your home lat/long and where you are.
 				 # if the difference between your phone location and home location is more
 				 # than mindist, I will assume your phone is 'out of the house'
 
 				 # returns and then use an appropriate substring
-my_dev_name="XXXX  iPhone 5S"	 # your device name. Uncomment the print dev line below to see all the device names and
 				 # pick the one that corresponds to your iPhone
 
 # If you are home, this file will contain the word 'in', otherwise it will contain 'out'
 # Now, you can easily use this file and change run states to start recording with ZM. Cool,huh?
-my_out_file="/usr/local/share/zoneminder/zm_phone_state.txt"
+my_out_file="/usr/share/zoneminder/zm_phone_state.txt"
 #my_out_log_file="/usr/local/share/zoneminder/zm_phone_state_log.txt"
 
 #f=open("/usr/local/share/zoneminder/zm_run_state.txt","r")
@@ -30,6 +33,22 @@ my_out_file="/usr/local/share/zoneminder/zm_phone_state.txt"
 
 
 api = PyiCloudService(my_name, my_password)
+if api.requires_2fa:
+	print "Two-factor authentication required. Your trusted devices are:"
+	devices = api.trusted_devices
+	for i, device in enumerate(devices):
+		print "  %s: %s" % (i, device.get('deviceName',
+		"SMS to %s" % device.get('phoneNumber')))
+	device = click.prompt('Which device would you like to use?', default=0)
+	device = devices[device]
+	if not api.send_verification_code(device):
+		print "Failed to send verification code"
+		sys.exit(1)
+	code = click.prompt('Please enter validation code')
+	if not api.validate_verification_code(device, code):
+		print "Failed to verify verification code"
+		sys.exit(1)
+
 for rdev in  api.devices:
 	dev = str(rdev)
 #	flog.write("Iterating device:%s\n" % dev);
